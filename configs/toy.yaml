@@ -1,0 +1,90 @@
+dataset: data/toy                    # <-- doc mini‑corpus
+k_values: [ 1, 3, 5, 10 ]
+metric: ndcg@10                      # primary score for winner
+repeats: 1                           # deterministic on toy set
+
+runs:
+  # -- 0 · lexical baseline ----------------------------------------
+  - name: bm25_native
+    embedding: { type: hf, model: sentence-transformers/all-MiniLM-L6-v2 }   # ignored by BM25
+    backend: { type: bm25 }
+
+  # -- 1 · local dense ---------------------------------------------
+  - name: minilm_faiss
+    embedding:
+      type: hf
+      model: sentence-transformers/all-MiniLM-L6-v2
+    backend:
+      type: faiss
+      metric: ip                    # inner‑product similarity
+
+  # -- 2 · OpenAI + in‑process memory ------------------------------
+  - name: openai_inmemory
+    embedding:
+      type: openai
+      model: text-embedding-3-large
+    backend:
+      type: inmemory                # LangChain InMemoryVectorStore (cosine)
+
+  # -- 3 · OpenAI + Pinecone SaaS ---------------------------------
+  - name: openai_pinecone
+    embedding:
+      type: openai
+      model: text-embedding-3-large
+    backend:
+      type: pinecone
+      metric: cosine
+      namespace: toy
+      pods: starter                 # uses PINECONE_* vars from .env
+
+  # -- 4 · OpenAI + Qdrant (local or cloud) ------------------------
+  - name: openai_qdrant
+    embedding:
+      type: openai
+      model: text-embedding-3-large
+    backend:
+      type: qdrant
+      metric: cosine
+
+  # -- 5 · Cohere + Chroma (embedded DB) ---------------------------
+  - name: cohere_chroma
+    embedding:
+      type: cohere
+      model: embed-english-v3.0
+    backend:
+      type: chroma
+      metric: cosine
+      persist_directory: .chroma/toy
+
+  # -- 6 · HF E5 + Qdrant -----------------------------------------
+  - name: e5large_qdrant
+    embedding:
+      type: hf
+      model: intfloat/e5-large-v2
+    backend:
+      type: qdrant
+      metric: cosine
+
+  # -- 7 · Hybrid (BM25 + dense) via RRF ---------------------------
+  - name: hybrid_bm25_openai
+    embedding:
+      type: openai
+      model: text-embedding-3-large
+    backend:
+      type: hybrid
+      sparse: { type: bm25 }
+      dense: { type: faiss, metric: ip }
+      fusion: rrf                  # Reciprocal‑Rank‑Fusion
+      fusion_weight_dense: 0.6
+
+  # -- 8 · Hybrid (BM25 + MiniLM) ---------------------------------
+  - name: hybrid_bm25_minilm
+    embedding:
+      type: hf
+      model: sentence-transformers/all-MiniLM-L6-v2
+    backend:
+      type: hybrid
+      sparse: { type: bm25 }
+      dense: { type: faiss, metric: ip }
+      fusion: rrf
+      fusion_weight_dense: 0.5
