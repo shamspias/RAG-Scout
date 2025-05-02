@@ -1,0 +1,111 @@
+###############################################################################
+#  Run *everything* – 11 embeddings × 8 vector stores × 3 retrieval modes
+#  ≈ 264 runs (GridRunner can parallelise or shard).
+###############################################################################
+
+dataset: data/my_big_corpus           # <-- point to your real corpus folder
+k_values: [ 1, 3, 5, 10 ]
+metric: ndcg@10
+repeats: 3                            # average ANN randomness
+primary_k: 10                         # nDCG@10/Recall@10
+
+# ---------------------------------------------------------------------------
+# 1 · Embedding models  (C in A×B×C)
+# ---------------------------------------------------------------------------
+embeddings:
+  # --- commercial APIs (LangChain-openai / -cohere / -voyageai) -------------
+  - id: openai_3_large
+    type: openai
+    model: text-embedding-3-large
+  - id: openai_3_small
+    type: openai
+    model: text-embedding-3-small
+  - id: cohere_v3
+    type: cohere
+    model: embed-english-v3.0
+  - id: voyage3_large
+    type: voyage
+    model: voyage-3-large
+
+  # --- top OSS models (LangChain‑HuggingFace) -------------------------------
+  - id: minilm
+    type: hf
+    model: sentence-transformers/all-MiniLM-L6-v2
+  - id: e5_large
+    type: hf
+    model: intfloat/e5-large-v2
+  - id: gtr_large
+    type: hf
+    model: sentence-transformers/gtr-t5-large
+  - id: stella_v5
+    type: hf
+    model: dunzhang/stella_en_1.5B_v5
+  - id: instructor_xl
+    type: hf
+    model: hkunlp/instructor-xl
+  # -- domain samples --------------------------------------------------------
+  - id: bio_bert
+    type: hf
+    model: dmis-lab/biobert-base-cased-v1.2
+  - id: sci_bert
+    type: hf
+    model: allenai/scibert_scivocab_uncased
+
+# ---------------------------------------------------------------------------
+# 2 · Vector back‑ends / stores  (B in A×B×C)
+# ---------------------------------------------------------------------------
+backends:
+  # local / embedded
+  - id: faiss_ip
+    type: faiss
+    metric: ip
+  - id: faiss_l2
+    type: faiss
+    metric: l2
+  - id: chroma
+    type: chroma
+    metric: cosine
+    persist_directory: .chroma/full
+
+  # memory only
+  - id: inmem
+    type: inmemory                # LangChain’s InMemoryVectorStore
+
+  # managed / external (require .env keys)
+  - id: pinecone
+    type: pinecone
+    metric: cosine
+    namespace: fullbench
+    pods: starter
+  - id: qdrant
+    type: qdrant
+    metric: cosine
+  - id: weaviate
+    type: weaviate
+    metric: cosine
+  - id: elastic_bm25
+    type: elastic_bm25            # sparse only – handled in retrieval mode
+
+# ---------------------------------------------------------------------------
+# 3 · Retrieval techniques  (A in A×B×C)
+# ---------------------------------------------------------------------------
+retrievals:
+  # dense‑only: embed → ANN search
+  - id: dense
+    mode: dense
+
+  # hybrid: BM25 + dense with Reciprocal‑Rank‑Fusion
+  - id: hybrid_rrf
+    mode: hybrid
+    fusion: rrf
+    fusion_weight_dense: 0.6
+
+  # sparse‑only (BM25)  – embedding settings ignored
+  - id: sparse
+    mode: sparse                  # will internally pick BM25 backend
+
+# ---------------------------------------------------------------------------
+# The runner will compute Cartesian product:
+# 11 embeddings × 8 back‑ends × 3 retrieval modes  = 264 runs
+# (it should automatically skip illegal combos, e.g. sparse+faiss).
+# ---------------------------------------------------------------------------
